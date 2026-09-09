@@ -1,0 +1,31 @@
+name: Deploy to cPanel
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Pull latest code from GitHub to cPanel
+        run: |
+          curl --fail-with-body -sS \
+            -H "Authorization: cpanel ${{ secrets.CPANEL_USERNAME }}:${{ secrets.CPANEL_API_TOKEN }}" \
+            --get \
+            --data-urlencode "repository_root=${{ secrets.CPANEL_REPOSITORY_ROOT }}" \
+            --data-urlencode "branch=main" \
+            "https://${{ secrets.CPANEL_HOST }}:2083/execute/VersionControl/update"
+
+      - name: Wait for cPanel Git update
+        run: sleep 10
+
+      - name: Deploy to website
+        run: |
+          curl --fail-with-body -sS \
+            -H "Authorization: cpanel ${{ secrets.CPANEL_USERNAME }}:${{ secrets.CPANEL_API_TOKEN }}" \
+            --get \
+            --data-urlencode "repository_root=${{ secrets.CPANEL_REPOSITORY_ROOT }}" \
+            "https://${{ secrets.CPANEL_HOST }}:2083/execute/VersionControlDeployment/create"
