@@ -1,3 +1,4 @@
+
 name: Deploy to cPanel
 
 on:
@@ -10,38 +11,26 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Pull latest code from GitHub to cPanel
+      - name: Test cPanel connection
         env:
-          CPANEL_USERNAME: ${{ secrets.CPANEL_USERNAME }}
-          CPANEL_API_TOKEN: ${{ secrets.CPANEL_API_TOKEN }}
-          CPANEL_REPOSITORY_ROOT: ${{ secrets.CPANEL_REPOSITORY_ROOT }}
           CPANEL_HOST: ${{ secrets.CPANEL_HOST }}
         run: |
-          echo "Updating cPanel repository..."
+          echo "Testing cPanel connection..."
+
+          if [[ "$CPANEL_HOST" == https://* ]]; then
+            echo "ERROR: CPANEL_HOST starts with https://"
+            exit 1
+          fi
+
+          if [[ "$CPANEL_HOST" == */* ]]; then
+            echo "ERROR: CPANEL_HOST contains /"
+            exit 1
+          fi
+
+          echo "CPANEL_HOST format looks correct."
 
           curl --fail-with-body -sS \
-            -H "Authorization: cpanel $CPANEL_USERNAME:$CPANEL_API_TOKEN" \
-            --get \
-            --data-urlencode "repository_root=$CPANEL_REPOSITORY_ROOT" \
-            --data-urlencode "branch=main" \
-            "https://$CPANEL_HOST:2083/execute/VersionControl/update"
+            "https://${CPANEL_HOST}:2083/"
 
-      - name: Wait for cPanel Git update
-        run: sleep 10
-
-      - name: Deploy to website
-        env:
-          CPANEL_USERNAME: ${{ secrets.CPANEL_USERNAME }}
-          CPANEL_API_TOKEN: ${{ secrets.CPANEL_API_TOKEN }}
-          CPANEL_REPOSITORY_ROOT: ${{ secrets.CPANEL_REPOSITORY_ROOT }}
-          CPANEL_HOST: ${{ secrets.CPANEL_HOST }}
-        run: |
-          echo "Deploying latest commit..."
-
-          curl --fail-with-body -sS \
-            -H "Authorization: cpanel $CPANEL_USERNAME:$CPANEL_API_TOKEN" \
-            --get \
-            --data-urlencode "repository_root=$CPANEL_REPOSITORY_ROOT" \
-            "https://$CPANEL_HOST:2083/execute/VersionControlDeployment/create"
-
-          echo "Deployment completed."
+      - name: Wait
+        run: echo "Connection test completed."
