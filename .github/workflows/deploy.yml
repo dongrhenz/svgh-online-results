@@ -22,7 +22,7 @@ jobs:
       - name: Wait for cPanel Git update
         run: sleep 10
 
-      - name: Deploy to website
+      - name: Deploy to website 
         run: |
           curl --fail-with-body -sS \
             -H "Authorization: cpanel ${{ secrets.CPANEL_USERNAME }}:${{ secrets.CPANEL_API_TOKEN }}" \
