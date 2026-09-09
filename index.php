@@ -270,7 +270,7 @@ body {
 <header class="header">
 
     <div class="logo">
-        <img src="/image/logo.png" alt="Hospital Logo" class="hospital-logo" height="50px" width="200px">
+        <img src="/images/logos.png" alt="Hospital Logo" class="hospital-logo" height="50px" width="200px">
         <!-- <div class="logo-icon"></div> -->
 
         <!-- <div class="logo-text">
