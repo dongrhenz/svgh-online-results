@@ -1,4 +1,4 @@
-name: Test cPanel Secrets
+name: Deploy to cPanel
 
 on:
   push:
@@ -6,39 +6,42 @@ on:
       - main
 
 jobs:
-  test-secrets:
+  deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Check GitHub Secrets
+      - name: Pull latest code from GitHub to cPanel
         env:
           CPANEL_USERNAME: ${{ secrets.CPANEL_USERNAME }}
           CPANEL_API_TOKEN: ${{ secrets.CPANEL_API_TOKEN }}
           CPANEL_REPOSITORY_ROOT: ${{ secrets.CPANEL_REPOSITORY_ROOT }}
           CPANEL_HOST: ${{ secrets.CPANEL_HOST }}
         run: |
-          echo "Checking GitHub Secrets..."
+          echo "Updating cPanel repository..."
 
-          if [ -n "$CPANEL_USERNAME" ]; then
-            echo "CPANEL_USERNAME = SET"
-          else
-            echo "CPANEL_USERNAME = EMPTY"
-          fi
+          curl --fail-with-body -sS \
+            -H "Authorization: cpanel $CPANEL_USERNAME:$CPANEL_API_TOKEN" \
+            --get \
+            --data-urlencode "repository_root=$CPANEL_REPOSITORY_ROOT" \
+            --data-urlencode "branch=main" \
+            "https://$CPANEL_HOST:2083/execute/VersionControl/update"
 
-          if [ -n "$CPANEL_API_TOKEN" ]; then
-            echo "CPANEL_API_TOKEN = SET"
-          else
-            echo "CPANEL_API_TOKEN = EMPTY"
-          fi
+      - name: Wait for cPanel Git update
+        run: sleep 10
 
-          if [ -n "$CPANEL_REPOSITORY_ROOT" ]; then
-            echo "CPANEL_REPOSITORY_ROOT = SET"
-          else
-            echo "CPANEL_REPOSITORY_ROOT = EMPTY"
-          fi
+      - name: Deploy to website
+        env:
+          CPANEL_USERNAME: ${{ secrets.CPANEL_USERNAME }}
+          CPANEL_API_TOKEN: ${{ secrets.CPANEL_API_TOKEN }}
+          CPANEL_REPOSITORY_ROOT: ${{ secrets.CPANEL_REPOSITORY_ROOT }}
+          CPANEL_HOST: ${{ secrets.CPANEL_HOST }}
+        run: |
+          echo "Deploying latest commit..."
 
-          if [ -n "$CPANEL_HOST" ]; then
-            echo "CPANEL_HOST = SET"
-          else
-            echo "CPANEL_HOST = EMPTY"
-          fi
+          curl --fail-with-body -sS \
+            -H "Authorization: cpanel $CPANEL_USERNAME:$CPANEL_API_TOKEN" \
+            --get \
+            --data-urlencode "repository_root=$CPANEL_REPOSITORY_ROOT" \
+            "https://$CPANEL_HOST:2083/execute/VersionControlDeployment/create"
+
+          echo "Deployment completed."
