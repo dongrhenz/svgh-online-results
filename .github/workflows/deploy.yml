@@ -1,4 +1,3 @@
-
 name: Deploy to cPanel
 
 on:
@@ -11,26 +10,38 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Test cPanel connection
+      - name: Pull latest code from GitHub to cPanel
         env:
+          CPANEL_USERNAME: ${{ secrets.CPANEL_USERNAME }}
+          CPANEL_API_TOKEN: ${{ secrets.CPANEL_API_TOKEN }}
+          CPANEL_REPOSITORY_ROOT: ${{ secrets.CPANEL_REPOSITORY_ROOT }}
           CPANEL_HOST: ${{ secrets.CPANEL_HOST }}
         run: |
-          echo "Testing cPanel connection..."
-
-          if [[ "$CPANEL_HOST" == https://* ]]; then
-            echo "ERROR: CPANEL_HOST starts with https://"
-            exit 1
-          fi
-
-          if [[ "$CPANEL_HOST" == */* ]]; then
-            echo "ERROR: CPANEL_HOST contains /"
-            exit 1
-          fi
-
-          echo "CPANEL_HOST format looks correct."
+          echo "Updating cPanel repository..."
 
           curl --fail-with-body -sS \
-            "https://${CPANEL_HOST}:2083/"
+            -H "Authorization: cpanel $CPANEL_USERNAME:$CPANEL_API_TOKEN" \
+            --get \
+            --data-urlencode "repository_root=$CPANEL_REPOSITORY_ROOT" \
+            --data-urlencode "branch=main" \
+            "https://$CPANEL_HOST:2083/execute/VersionControl/update"
 
-      - name: Wait
-        run: echo "Connection test completed."
+      - name: Wait for cPanel Git update
+        run: sleep 15
+
+      - name: Deploy to website
+        env:
+          CPANEL_USERNAME: ${{ secrets.CPANEL_USERNAME }}
+          CPANEL_API_TOKEN: ${{ secrets.CPANEL_API_TOKEN }}
+          CPANEL_REPOSITORY_ROOT: ${{ secrets.CPANEL_REPOSITORY_ROOT }}
+          CPANEL_HOST: ${{ secrets.CPANEL_HOST }}
+        run: |
+          echo "Deploying latest commit..."
+
+          curl --fail-with-body -sS \
+            -H "Authorization: cpanel $CPANEL_USERNAME:$CPANEL_API_TOKEN" \
+            --get \
+            --data-urlencode "repository_root=$CPANEL_REPOSITORY_ROOT" \
+            "https://$CPANEL_HOST:2083/execute/VersionControlDeployment/create"
+
+          echo "Deployment completed successfully."
