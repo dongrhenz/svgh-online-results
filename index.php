@@ -274,7 +274,7 @@ body {
         <!-- <div class="logo-icon"></div> -->
 
         <!-- <div class="logo-text">
-            <strong>SVGH</strong>
+            <strong>ST. VINCENT/strong>
             <span>GENERAL HOSPITAL</span>
         </div> -->
     </div>
