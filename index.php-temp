@@ -1,0 +1,269 @@
+<?php
+
+$config = require __DIR__ . '/config.php';
+$patients = require __DIR__ . '/data/patients.php';
+
+$patientName = trim((string) ($_POST['patient_name'] ?? ''));
+$patientReference = trim((string) ($_POST['patient_reference'] ?? ''));
+$result = null;
+$error = null;
+$success = null;
+$currentHost = strtolower((string) ($_SERVER['HTTP_HOST'] ?? $_SERVER['SERVER_NAME'] ?? 'localhost'));
+$currentHost = preg_replace('/:\d+$/', '', $currentHost) ?? 'localhost';
+
+$recaptchaConfig = $config['recaptcha'] ?? [];
+$recaptchaEnabled = (bool) ($recaptchaConfig['enabled'] ?? false);
+$siteKey = trim((string) ($recaptchaConfig['site_key'] ?? ''));
+$secretKey = trim((string) ($recaptchaConfig['secret_key'] ?? ''));
+$skipOnHosts = array_map(
+    static fn ($host): string => strtolower(trim((string) $host)),
+    (array) ($recaptchaConfig['skip_on_hosts'] ?? [])
+);
+$productionHosts = array_map(
+    static fn ($host): string => strtolower(trim((string) $host)),
+    (array) ($recaptchaConfig['production_hosts'] ?? [])
+);
+$isSkippedHost = in_array($currentHost, $skipOnHosts, true);
+$isProductionHost = in_array($currentHost, $productionHosts, true);
+$recaptchaRequired = $recaptchaEnabled && !$isSkippedHost;
+$recaptchaReady = !$recaptchaRequired || ($siteKey !== '' && $secretKey !== '');
+
+function normalize_value(string $value): string
+{
+    $value = strtolower(trim($value));
+    return preg_replace('/[^a-z0-9]/', '', $value) ?? '';
+}
+
+function verify_recaptcha(string $token, string $secretKey): bool
+{
+    $postData = http_build_query([
+        'secret' => $secretKey,
+        'response' => $token,
+    ]);
+
+    $context = stream_context_create([
+        'http' => [
+            'method' => 'POST',
+            'header' => "Content-type: application/x-www-form-urlencoded\r\n",
+            'content' => $postData,
+            'timeout' => 10,
+        ],
+    ]);
+
+    $response = @file_get_contents('https://www.google.com/recaptcha/api/siteverify', false, $context);
+    if ($response === false) {
+        return false;
+    }
+
+    $decoded = json_decode($response, true);
+    return is_array($decoded) && !empty($decoded['success']);
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if ($patientName === '' || $patientReference === '') {
+        $error = 'Please enter the patient name and either the patient number or OR number.';
+    } elseif ($recaptchaRequired) {
+        $token = trim((string) ($_POST['g-recaptcha-response'] ?? ''));
+
+        if (!$recaptchaReady) {
+            $error = 'reCAPTCHA is enabled but the site key or secret key has not been configured yet.';
+        } elseif ($token === '') {
+            $error = 'Please complete the reCAPTCHA verification before searching.';
+        } elseif (!verify_recaptcha($token, $secretKey)) {
+            $error = 'reCAPTCHA verification failed. Please try again.';
+        }
+    }
+
+    if ($error === null) {
+        $normalizedName = normalize_value($patientName);
+        $normalizedReference = normalize_value($patientReference);
+
+        foreach ($patients as $patient) {
+            $matchesName = normalize_value((string) $patient['name']) === $normalizedName;
+            $matchesPatientNumber = normalize_value((string) $patient['patient_number']) === $normalizedReference;
+            $matchesOrNumber = normalize_value((string) $patient['or_number']) === $normalizedReference;
+
+            if ($matchesName && ($matchesPatientNumber || $matchesOrNumber)) {
+                $fileName = basename((string) $patient['result_file']);
+                $absoluteFile = __DIR__ . '/results/' . $fileName;
+
+                if (is_file($absoluteFile)) {
+                    $result = $patient;
+                    $result['result_path'] = 'results/' . rawurlencode($fileName);
+                    $success = 'Result found. You can preview or download it below.';
+                } else {
+                    $error = 'The matched record was found, but the PDF file is missing from the results folder.';
+                }
+                break;
+            }
+        }
+    }
+
+    if ($error === null && $result === null) {
+        $error = 'No matching result was found. Double-check the name and patient number or OR number.';
+    }
+}
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><?= htmlspecialchars($config['site_name'] ?? 'Laboratory Results Portal') ?></title>
+    <link rel="stylesheet" href="assets/styles.css">
+    <?php if ($recaptchaRequired && $siteKey !== ''): ?>
+        <script src="https://www.google.com/recaptcha/api.js" async defer></script>
+    <?php endif; ?>
+</head>
+<body>
+    <main class="page-shell">
+        <div class="container">
+            <section class="hero">
+                <article class="hero-card">
+                    <span class="eyebrow">Online Results Access</span>
+                    <h1><?= htmlspecialchars($config['site_name'] ?? 'Laboratory Results Portal') ?></h1>
+                        <p>
+                            Patients can securely search for laboratory and diagnostic results by entering their full name together
+                            with a patient number or OR number. reCAPTCHA is used to protect the form from automated access on live hosts.
+                        </p>
+                </article>
+
+                <aside class="info-grid">
+                    <article class="info-box">
+                        <h2>How Search Works</h2>
+                        <p>The patient name must match the registered record, then the second field can be either the patient number or the OR number.</p>
+                    </article>
+                    <article class="info-box">
+                        <h2>Sample PDFs Ready</h2>
+                        <p>The portal is already connected to the PDF files currently inside the <strong>results</strong> folder.</p>
+                    </article>
+                </aside>
+            </section>
+
+            <section class="content-grid">
+                <div class="stack">
+                    <article class="form-card">
+                        <h2>Find Patient Result</h2>
+                        <p>Enter the patient details exactly as registered in your record list.</p>
+
+                        <form
+                            method="post"
+                            class="stack"
+                            data-search-form
+                            data-recaptcha-enabled="<?= $recaptchaRequired ? '1' : '0' ?>"
+                            data-site-key-configured="<?= $siteKey !== '' ? '1' : '0' ?>"
+                        >
+                            <div>
+                                <label for="patient_name">Patient Name</label>
+                                <input
+                                    type="text"
+                                    id="patient_name"
+                                    name="patient_name"
+                                    value="<?= htmlspecialchars($patientName) ?>"
+                                    placeholder="e.g. Juan Dela Cruz"
+                                    required
+                                >
+                            </div>
+
+                            <div>
+                                <label for="patient_reference">Patient Number or OR Number</label>
+                                <input
+                                    type="text"
+                                    id="patient_reference"
+                                    name="patient_reference"
+                                    value="<?= htmlspecialchars($patientReference) ?>"
+                                    placeholder="e.g. P-001 or OR-24001"
+                                    required
+                                >
+                                <span class="field-note">Either reference works as long as it belongs to the same patient.</span>
+                            </div>
+
+                            <?php if ($recaptchaRequired): ?>
+                                <div
+                                    class="g-recaptcha"
+                                    data-sitekey="<?= htmlspecialchars($siteKey) ?>"
+                                    data-callback="onRecaptchaSuccess"
+                                    data-expired-callback="onRecaptchaExpired"
+                                ></div>
+                            <?php endif; ?>
+
+                            <div class="captcha-note" data-captcha-note></div>
+                            <button type="submit" class="submit-btn" data-submit-button>Search Result</button>
+
+                            <?php if ($error !== null): ?>
+                                <div class="status status-error"><?= htmlspecialchars($error) ?></div>
+                            <?php endif; ?>
+
+                            <?php if ($success !== null): ?>
+                                <div class="status status-success"><?= htmlspecialchars($success) ?></div>
+                            <?php endif; ?>
+                        </form>
+                    </article>
+
+                    <article class="help-card">
+                        <h2>Setup Notes</h2>
+                        <p>
+                            Current host: <strong><?= htmlspecialchars($currentHost) ?></strong>.
+                            <?php if ($recaptchaRequired): ?>
+                                reCAPTCHA is required on this host.
+                            <?php elseif ($isSkippedHost): ?>
+                                reCAPTCHA is skipped on this local host for easier testing.
+                            <?php elseif ($isProductionHost): ?>
+                                This host is marked as production, but reCAPTCHA is not active because it is disabled in config.
+                            <?php else: ?>
+                                This host is not listed as local or production. Review your config before deployment.
+                            <?php endif; ?>
+                        </p>
+                        <ul>
+                            <li>Edit <code>data/patients.php</code> to replace the sample names and references with your real patient data.</li>
+                            <li>Keep the PDF filenames inside <code>results</code> exactly the same as the filenames referenced in the patient registry.</li>
+                            <li>Add your Google reCAPTCHA v2 checkbox site key and secret key in <code>config.php</code>.</li>
+                            <li>Update <code>skip_on_hosts</code> for local testing and replace <code>production_hosts</code> with your real public domain before go-live.</li>
+                        </ul>
+                    </article>
+                </div>
+
+                <article class="result-card">
+                    <h2>Result Preview</h2>
+
+                    <?php if ($result !== null): ?>
+                        <div class="detail-grid">
+                            <div class="detail">
+                                <span>Patient Name</span>
+                                <strong><?= htmlspecialchars((string) $result['name']) ?></strong>
+                            </div>
+                            <div class="detail">
+                                <span>Patient Number</span>
+                                <strong><?= htmlspecialchars((string) $result['patient_number']) ?></strong>
+                            </div>
+                            <div class="detail">
+                                <span>OR Number</span>
+                                <strong><?= htmlspecialchars((string) $result['or_number']) ?></strong>
+                            </div>
+                            <div class="detail">
+                                <span>Test / Procedure</span>
+                                <strong><?= htmlspecialchars((string) $result['test_name']) ?></strong>
+                            </div>
+                        </div>
+
+                        <p>
+                            Released on <strong><?= htmlspecialchars((string) $result['released_at']) ?></strong>.
+                            <a class="link-btn" href="<?= htmlspecialchars((string) $result['result_path']) ?>" target="_blank" rel="noopener noreferrer">Open PDF in New Tab</a>
+                        </p>
+
+                        <iframe
+                            class="viewer"
+                            src="<?= htmlspecialchars((string) $result['result_path']) ?>"
+                            title="Patient result preview"
+                        ></iframe>
+                    <?php else: ?>
+                        <p>Search results will appear here after a successful patient lookup.</p>
+                    <?php endif; ?>
+                </article>
+            </section>
+        </div>
+    </main>
+
+    <script src="assets/app.js"></script>
+</body>
+</html>
