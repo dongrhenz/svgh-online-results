@@ -1,4 +1,4 @@
-name: Deploy to cPanel
+name: Test cPanel Secrets
 
 on:
   push:
@@ -6,26 +6,39 @@ on:
       - main
 
 jobs:
-  deploy:
+  test-secrets:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Pull latest code from GitHub to cPanel
+      - name: Check GitHub Secrets
+        env:
+          CPANEL_USERNAME: ${{ secrets.CPANEL_USERNAME }}
+          CPANEL_API_TOKEN: ${{ secrets.CPANEL_API_TOKEN }}
+          CPANEL_REPOSITORY_ROOT: ${{ secrets.CPANEL_REPOSITORY_ROOT }}
+          CPANEL_HOST: ${{ secrets.CPANEL_HOST }}
         run: |
-          curl --fail-with-body -sS \
-            -H "Authorization: cpanel ${{ secrets.CPANEL_USERNAME }}:${{ secrets.CPANEL_API_TOKEN }}" \
-            --get \
-            --data-urlencode "repository_root=${{ secrets.CPANEL_REPOSITORY_ROOT }}" \
-            --data-urlencode "branch=main" \
-            "https://${{ secrets.CPANEL_HOST }}:2083/execute/VersionControl/update"
+          echo "Checking GitHub Secrets..."
 
-      - name: Wait for cPanel Git update
-        run: sleep 10
+          if [ -n "$CPANEL_USERNAME" ]; then
+            echo "CPANEL_USERNAME = SET"
+          else
+            echo "CPANEL_USERNAME = EMPTY"
+          fi
 
-      - name: Deploy to website 
-        run: |
-          curl --fail-with-body -sS \
-            -H "Authorization: cpanel ${{ secrets.CPANEL_USERNAME }}:${{ secrets.CPANEL_API_TOKEN }}" \
-            --get \
-            --data-urlencode "repository_root=${{ secrets.CPANEL_REPOSITORY_ROOT }}" \
-            "https://${{ secrets.CPANEL_HOST }}:2083/execute/VersionControlDeployment/create"
+          if [ -n "$CPANEL_API_TOKEN" ]; then
+            echo "CPANEL_API_TOKEN = SET"
+          else
+            echo "CPANEL_API_TOKEN = EMPTY"
+          fi
+
+          if [ -n "$CPANEL_REPOSITORY_ROOT" ]; then
+            echo "CPANEL_REPOSITORY_ROOT = SET"
+          else
+            echo "CPANEL_REPOSITORY_ROOT = EMPTY"
+          fi
+
+          if [ -n "$CPANEL_HOST" ]; then
+            echo "CPANEL_HOST = SET"
+          else
+            echo "CPANEL_HOST = EMPTY"
+          fi
