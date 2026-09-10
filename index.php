@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
-<!-- Deployment test -->
+<!-- TEST 1: GitHub to cPanel deployment -->
 <!-- TEST 2: GitHub to cPanel deployment -->
 <head>
     <meta charset="UTF-8">
