@@ -300,7 +300,7 @@ body {
         <h1 class="title">
             Check your laboratory<br>
             &amp; diagnostic results<br>
-            online!
+            online! 
         </h1>
 
         <div class="red-line"></div>
@@ -350,8 +350,7 @@ body {
                 SUBMIT
             </button>
 
-                <div class="demo-message">
-                    Please enter the required information.                </div>
+                <div class="demo-message"> </div>
             
         </form>
 
